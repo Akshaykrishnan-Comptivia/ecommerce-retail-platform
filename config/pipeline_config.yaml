@@ -1,1 +1,24 @@
-﻿
+﻿storage:
+  raw_landing_zone: /Volumes/ecommerce_catalog/bronze/raw_data
+
+data_sources:
+  olist_brazilian_ecommerce:
+    source_url: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
+    kaggle_dataset: olistbr/brazilian-ecommerce
+    format: kaggle
+    domain: marketplace
+
+  uci_online_retail_ii:
+    source_url: https://archive.ics.uci.edu/dataset/502/online+retail+ii
+    url: https://archive.ics.uci.edu/static/public/502/online+retail+II.zip
+    format: zip
+    domain: retail
+    inner_file: online_retail_II.xlsx
+
+  amazon_customer_reviews:
+    source_url: https://amazon-reviews-2023.github.io/
+    url: https://huggingface.co/datasets/McAuley-Lab/Amazon-Reviews-2023/resolve/main/raw/review_categories/All_Beauty.jsonl
+    format: jsonl
+    domain: reviews
+    category: All_Beauty
+    max_records: 100000
