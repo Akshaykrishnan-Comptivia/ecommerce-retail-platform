@@ -10,7 +10,7 @@ data_sources:
 
   uci_online_retail_ii:
     source_url: https://archive.ics.uci.edu/dataset/502/online+retail+ii
-    url: https://archive.ics.uci.edu/static/public/502/online+retail+II.zip
+    url: https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip
     format: zip
     domain: retail
     inner_file: online_retail_II.xlsx

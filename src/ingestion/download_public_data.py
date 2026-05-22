@@ -100,7 +100,7 @@ class PublicDataDownloader:
                 },
                 "uci_online_retail_ii": {
                     "source_url": "https://archive.ics.uci.edu/dataset/502/online+retail+ii",
-                    "url": "https://archive.ics.uci.edu/static/public/502/online+retail+II.zip",
+                    "url": "https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip",
                     "format": "zip",
                     "domain": "retail",
                     "inner_file": "online_retail_II.xlsx",
@@ -164,10 +164,10 @@ class PublicDataDownloader:
     def _download_kaggle(self, source_config: dict, output_dir: str, source_name: str):
         """Download a Kaggle dataset and write CSV files to the landing zone.
 
-        TRAINEE NOTE — Kaggle authentication:
-        Kaggle requires API credentials before downloads work. On Databricks, place
-        kaggle.json at ~/.kaggle/kaggle.json or set KAGGLE_USERNAME and
-        KAGGLE_KEY environment variables.
+        TRAINEE NOTE - Kaggle authentication:
+        Kaggle requires API credentials before downloads work. On Databricks Serverless,
+        set KAGGLE_USERNAME and KAGGLE_KEY environment variables (recommended), or
+        place kaggle.json in a writable directory via KAGGLE_CONFIG_DIR.
 
         The Olist dataset is a ZIP containing multiple related CSV tables
         (orders, customers, products, payments, etc.) — typical of a
@@ -301,9 +301,11 @@ class PublicDataDownloader:
         response.raise_for_status()
 
         with open(local_path, "w", encoding="utf-8") as out_file:
-            for line in response.iter_lines(decode_unicode=True):
+            for line in response.iter_lines():
                 if not line:
                     continue
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8")
                 out_file.write(line + "\n")
                 records_written += 1
                 if max_records and records_written >= max_records:
