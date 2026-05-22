@@ -1,6 +1,26 @@
 ﻿storage:
   raw_landing_zone: /Volumes/ecommerce_catalog/bronze/raw_data
 
+catalog: ecommerce_catalog
+bronze:
+  schema: bronze
+  tables:
+    clickstream: bronze_clickstream_json
+synthetic:
+  clickstream:
+    num_events: 1000000
+    output_subpath: synthetic/clickstream
+    event_types:
+      - page_view
+      - add_to_cart
+      - checkout
+      - purchase
+    num_users: 10000
+    num_products: 500
+    num_sessions: 5000
+    events_per_session_min: 3
+    events_per_session_max: 12
+
 data_sources:
   olist_brazilian_ecommerce:
     source_url: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
