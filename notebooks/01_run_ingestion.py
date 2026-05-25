@@ -8,7 +8,7 @@
 # MAGIC **Prerequisites:**
 # MAGIC 1. Unity Catalog + Volume created (`ecommerce_catalog.bronze.raw_data`)
 # MAGIC 2. Cluster has outbound internet access
-# MAGIC 3. (Optional) Databricks secret scope `kaggle` with keys `username` and `key` for Olist
+# MAGIC 3. (Optional) Set `KAGGLE_USERNAME` and `KAGGLE_KEY` below for Olist (Kaggle)
 # MAGIC
 # MAGIC **Public sources downloaded (optional):**
 # MAGIC - Brazilian E-Commerce by Olist (Kaggle)
@@ -28,33 +28,28 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
-import json
 import os
 
 # TRAINEE NOTE - Kaggle authentication is required only for the Olist source.
-# Create a secret scope named "kaggle" with keys "username" and "key".
-# UCI and Amazon sources work without Kaggle creds.
-KAGGLE_SECRET_SCOPE = "kaggle"
+# Set your Kaggle username (from kaggle.com/settings) and API key below.
+# UCI and Amazon sources work without Kaggle creds. Do not commit real tokens to git.
+KAGGLE_USERNAME = "blessey.maria@comptivia.com"  # e.g. "your_kaggle_username" (not your email)
+KAGGLE_KEY = "KGAT_fb2ae310e5115a870b3cbfdeb3abc5b8"  # e.g. "KGAT_..." from kaggle.com/settings
 SETUP_KAGGLE = True
 
 if SETUP_KAGGLE:
-    try:
-        os.environ["KAGGLE_USERNAME"] = dbutils.secrets.get(
-            scope=KAGGLE_SECRET_SCOPE, key="username"
-        )
-        os.environ["KAGGLE_KEY"] = dbutils.secrets.get(
-            scope=KAGGLE_SECRET_SCOPE, key="key"
-        )
+    if KAGGLE_USERNAME and KAGGLE_KEY:
+        os.environ["KAGGLE_USERNAME"] = KAGGLE_USERNAME
+        os.environ["KAGGLE_KEY"] = KAGGLE_KEY
         print("Kaggle credentials configured (environment variables).")
-    except Exception as e:
+    else:
         print(
             "WARNING: Kaggle credentials not configured - "
             "olist_brazilian_ecommerce will fail."
         )
-        print(f"  Reason: {e}")
         print(
-            "  Fix: create secret scope 'kaggle' with keys 'username' and 'key', "
-            "or set SETUP_KAGGLE = False to skip."
+            "  Fix: set KAGGLE_USERNAME and KAGGLE_KEY in this cell, "
+            "or set SETUP_KAGGLE = False to skip Olist only."
         )
 
 # COMMAND ----------
