@@ -12,8 +12,10 @@ Usage (Databricks notebook):
 
 from __future__ import annotations
 
+import re
+
 import yaml
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import current_timestamp
 
 
@@ -76,6 +78,17 @@ def _landing_path(config: dict, subpath: str) -> str:
     return f"{base}/{subpath}"
 
 
+def _sanitize_column_names(df: DataFrame) -> DataFrame:
+    """Rename columns so Delta accepts them (e.g. UCI 'Customer ID' -> 'Customer_ID')."""
+    for old_name in df.columns:
+        new_name = re.sub(r"[,;{}()\n\t= ]+", "_", old_name).strip("_")
+        if not new_name:
+            new_name = "unnamed_column"
+        if new_name != old_name:
+            df = df.withColumnRenamed(old_name, new_name)
+    return df
+
+
 def ingest_csv_to_bronze(
     spark: SparkSession,
     source_path: str,
@@ -88,6 +101,7 @@ def ingest_csv_to_bronze(
         .option("inferSchema", "true")
         .csv(source_path)
     )
+    df = _sanitize_column_names(df)
     df = df.withColumn("_ingested_at", current_timestamp())
 
     row_count = df.count()
