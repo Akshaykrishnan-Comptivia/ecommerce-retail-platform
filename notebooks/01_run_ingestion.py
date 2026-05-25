@@ -1,4 +1,4 @@
-# Databricks notebook source
+﻿# Databricks notebook source
 # MAGIC %md
 # MAGIC # E-Commerce Retail Platform — Run Ingestion
 # MAGIC Downloads public e-commerce datasets into the Bronze landing zone.
@@ -10,7 +10,9 @@
 # MAGIC 2. Cluster has outbound internet access
 # MAGIC 3. (Optional) Set `KAGGLE_USERNAME` and `KAGGLE_KEY` below for Olist (Kaggle)
 # MAGIC
-# MAGIC **Public sources downloaded (optional):**
+# MAGIC **Public sources (optional):**
+# MAGIC - Download CSV/JSONL to Volume `raw_data`
+# MAGIC - Bronze Delta tables: Olist (9 tables), UCI (2 tables), Amazon reviews
 # MAGIC - Brazilian E-Commerce by Olist (Kaggle)
 # MAGIC - Online Retail II (UCI)
 # MAGIC - Amazon Customer Reviews 2023 (Hugging Face)
@@ -75,6 +77,17 @@ if RUN_PUBLIC_DOWNLOADS:
 
 # COMMAND ----------
 
+if RUN_PUBLIC_DOWNLOADS:
+    from src.bronze.ingest_structured import ingest_public_csv_sources
+    from src.bronze.ingest_semi_structured import ingest_amazon_reviews
+
+    bronze_public_tables = ingest_public_csv_sources(spark, config_path=config_path)
+    amazon_bronze_table = ingest_amazon_reviews(spark, config_path=config_path)
+    bronze_public_tables["amazon"] = {"all_beauty": amazon_bronze_table}
+    print(f"Amazon Bronze table: {amazon_bronze_table}")
+
+# COMMAND ----------
+
 from src.bronze.ingest_semi_structured import ingest_clickstream
 from src.ingestion.generate_synthetic import SyntheticDataGenerator
 
@@ -102,6 +115,12 @@ display(dbutils.fs.ls(clickstream_raw))
 print(f"\nBronze clickstream row count:")
 display(spark.table(bronze_clickstream_table).limit(10))
 print(spark.table(bronze_clickstream_table).count())
+
+if RUN_PUBLIC_DOWNLOADS:
+    print("\nPublic Bronze tables (sample):")
+    display(spark.table("ecommerce_catalog.bronze.bronze_olist_orders_dataset").limit(5))
+    display(spark.table("ecommerce_catalog.bronze.bronze_uci_retail_2009_2010").limit(5))
+    display(spark.table("ecommerce_catalog.bronze.bronze_amazon_reviews_all_beauty").limit(5))
 
 print("\nIngestion complete!")
 print("Next step: Run 02_run_silver.py to transform clickstream (sessionization).")

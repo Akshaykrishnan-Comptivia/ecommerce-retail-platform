@@ -6,6 +6,23 @@ bronze:
   schema: bronze
   tables:
     clickstream: bronze_clickstream_json
+  public:
+    olist:
+      landing_subpath: marketplace/olist_brazilian_ecommerce
+      table_prefix: bronze_
+    uci:
+      landing_subpath: retail/uci_online_retail_ii
+      tables:
+        year_2009_2010: bronze_uci_retail_2009_2010
+        year_2010_2011: bronze_uci_retail_2010_2011
+      paths:
+        year_2009_2010: Year_2009_2010/Year_2009_2010.csv
+        year_2010_2011: Year_2010_2011/Year_2010_2011.csv
+    amazon:
+      landing_subpath: reviews/amazon_customer_reviews
+      source_file: All_Beauty.jsonl
+      table: bronze_amazon_reviews_all_beauty
+
 synthetic:
   clickstream:
     num_events: 1000000
