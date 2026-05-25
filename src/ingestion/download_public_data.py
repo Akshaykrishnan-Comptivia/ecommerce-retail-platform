@@ -94,40 +94,38 @@ class PublicDataDownloader:
             "dbutils is not available. Run this downloader on Databricks with an active spark session."
         )
 
-    def _staging_dir(self, source_name: str) -> str:
-        return f"{self.landing_zone}/_staging/{source_name}"
+    def _copy_local_file_to_destination(self, local_path: str, volume_path: str) -> str:
+        """Copy a driver-local file into the landing-zone Volume (no Spark file reads).
 
-    def _copy_local_file_to_volume(self, local_path: str, source_name: str) -> str:
-        """Copy a driver-local file into the landing-zone Volume for Spark reads.
-
-        TRAINEE NOTE - Why stage through the Volume?
-        On Databricks Serverless, spark.read.csv('/tmp/...') fails with
-        INSUFFICIENT_PERMISSIONS (SELECT on local files). Spark can read
-        paths under /Volumes/... when the user has READ VOLUME on raw_data.
+        TRAINEE NOTE - Why copy-only?
+        On Databricks Serverless, spark.read.csv('/tmp/...') and even some Volume
+        reads fail with INSUFFICIENT_PERMISSIONS (SELECT on local files).
+        dbutils.fs.cp('file:/tmp/...', '/Volumes/...') lands raw files the Bronze
+        layer can ingest later without Spark reading driver-local paths.
         """
         dbutils = self._get_dbutils()
-        staging_dir = self._staging_dir(source_name)
-        dbutils.fs.mkdirs(staging_dir)
+        parent = os.path.dirname(volume_path)
+        if parent:
+            dbutils.fs.mkdirs(parent)
 
-        dest_path = f"{staging_dir}/{os.path.basename(local_path)}"
         file_uri = local_path if local_path.startswith("file:") else f"file:{local_path}"
 
         try:
-            dbutils.fs.rm(dest_path)
+            dbutils.fs.rm(volume_path)
         except Exception:
             pass
 
-        dbutils.fs.cp(file_uri, dest_path)
-        print(f"  -> Staged to Volume: {dest_path}")
-        return dest_path
+        dbutils.fs.cp(file_uri, volume_path)
+        print(f"  -> Copied to Volume: {volume_path}")
+        return volume_path
 
-    def _read_csv_from_local(self, local_path: str, source_name: str):
-        volume_path = self._copy_local_file_to_volume(local_path, source_name)
-        return self.spark.read.option("header", "true").csv(volume_path)
-
-    def _read_json_from_local(self, local_path: str, source_name: str):
-        volume_path = self._copy_local_file_to_volume(local_path, source_name)
-        return self.spark.read.json(volume_path)
+    def _normalize_pandas_for_export(self, pdf):
+        """Coerce object columns (e.g. Invoice with nulls) for reliable CSV export."""
+        pdf = pdf.copy()
+        for col in pdf.columns:
+            if pdf[col].dtype == object:
+                pdf[col] = pdf[col].fillna("").astype(str)
+        return pdf
 
     def _default_config(self):
         """Return hardcoded default config when no config file is provided.
@@ -258,10 +256,15 @@ class PublicDataDownloader:
         for csv_file in csv_files:
             table_name = os.path.splitext(csv_file)[0]
             local_path = os.path.join(local_dir, csv_file)
-            table_output = f"{output_dir}/{table_name}"
-            df = self._read_csv_from_local(local_path, source_name)
-            df.write.mode("overwrite").option("header", "true").csv(table_output)
-            print(f"  -> {table_name}: {df.count()} rows")
+            volume_path = f"{output_dir}/{table_name}/{csv_file}"
+            self._copy_local_file_to_destination(local_path, volume_path)
+            try:
+                import pandas as pd
+
+                row_count = len(pd.read_csv(local_path))
+                print(f"  -> {table_name}: {row_count} rows")
+            except Exception:
+                print(f"  -> {table_name}: copied")
 
     def _download_zip(self, source_config: dict, output_dir: str, source_name: str):
         """Download a ZIP archive, extract it, and write contents to the landing zone.
@@ -298,7 +301,7 @@ class PublicDataDownloader:
                 if not matches:
                     raise FileNotFoundError(f"Expected file '{inner_file}' not found in archive")
                 inner_path = matches[0]
-            self._write_xlsx_sheets(inner_path, output_dir)
+            self._write_xlsx_sheets(inner_path, output_dir, source_name)
             return
 
         for root, _, files in os.walk(extract_dir):
@@ -306,27 +309,35 @@ class PublicDataDownloader:
                 local_path = os.path.join(root, filename)
                 relative_name = os.path.splitext(filename)[0]
                 if filename.lower().endswith(".csv"):
-                    df = self._read_csv_from_local(local_path, source_name)
-                    df.write.mode("overwrite").option("header", "true").csv(
-                        f"{output_dir}/{relative_name}"
-                    )
-                    print(f"  -> {relative_name}: {df.count()} rows")
+                    volume_path = f"{output_dir}/{relative_name}/{filename}"
+                    self._copy_local_file_to_destination(local_path, volume_path)
+                    print(f"  -> {relative_name}: copied")
                 elif filename.lower().endswith((".xlsx", ".xls")):
-                    self._write_xlsx_sheets(local_path, f"{output_dir}/{relative_name}")
+                    self._write_xlsx_sheets(
+                        local_path, f"{output_dir}/{relative_name}", source_name
+                    )
 
-    def _write_xlsx_sheets(self, xlsx_path: str, output_dir: str):
-        """Read an Excel workbook sheet-by-sheet and write each as CSV."""
+    def _write_xlsx_sheets(self, xlsx_path: str, output_dir: str, source_name: str):
+        """Read an Excel workbook sheet-by-sheet and land each sheet as CSV in the Volume.
+
+        TRAINEE NOTE - Invoice column fix:
+        Online Retail II mixes strings and nulls in columns like Invoice. Spark
+        Arrow conversion fails on those object columns, so we normalize with pandas,
+        export to CSV on the driver, then copy to the Volume (no Spark read/write).
+        """
         try:
             import pandas as pd
 
             workbook = pd.ExcelFile(xlsx_path)
             for sheet_name in workbook.sheet_names:
                 pdf = pd.read_excel(xlsx_path, sheet_name=sheet_name)
-                df = self.spark.createDataFrame(pdf)
+                pdf = self._normalize_pandas_for_export(pdf)
                 safe_sheet = sheet_name.replace(" ", "_").replace("-", "_")
-                sheet_output = f"{output_dir}/{safe_sheet}"
-                df.write.mode("overwrite").option("header", "true").csv(sheet_output)
-                print(f"  -> {sheet_name}: {df.count()} rows")
+                local_csv = f"/tmp/{source_name}_{safe_sheet}.csv"
+                pdf.to_csv(local_csv, index=False)
+                volume_path = f"{output_dir}/{safe_sheet}/{safe_sheet}.csv"
+                self._copy_local_file_to_destination(local_csv, volume_path)
+                print(f"  -> {sheet_name}: {len(pdf)} rows")
         except ImportError as exc:
             raise ImportError(
                 "Reading XLSX requires pandas and openpyxl. "
@@ -370,7 +381,7 @@ class PublicDataDownloader:
             print(f"  -> No records downloaded for {source_name}")
             return
 
-        df = self._read_json_from_local(local_path, source_name)
-        df.write.mode("overwrite").json(output_dir)
+        volume_path = f"{output_dir}/{category}.jsonl"
+        self._copy_local_file_to_destination(local_path, volume_path)
         print(f"  -> Category: {category}")
         print(f"  -> Total records downloaded: {records_written}")
