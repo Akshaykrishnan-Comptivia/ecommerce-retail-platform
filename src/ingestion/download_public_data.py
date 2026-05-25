@@ -38,6 +38,7 @@ Usage (Databricks notebook):
 """
 
 import os
+import shutil
 import subprocess
 import zipfile
 
@@ -74,48 +75,25 @@ class PublicDataDownloader:
             self.config = self._default_config()
         self.landing_zone = self.config["storage"]["raw_landing_zone"]
 
-    def _get_dbutils(self):
-        """Return Databricks dbutils (required to stage local files into Volumes)."""
-        try:
-            from pyspark.dbutils import DBUtils
-
-            return DBUtils(self.spark)
-        except Exception:
-            pass
-        try:
-            import IPython
-
-            ip = IPython.get_ipython()
-            if ip is not None and "dbutils" in ip.user_ns:
-                return ip.user_ns["dbutils"]
-        except Exception:
-            pass
-        raise RuntimeError(
-            "dbutils is not available. Run this downloader on Databricks with an active spark session."
-        )
-
     def _copy_local_file_to_destination(self, local_path: str, volume_path: str) -> str:
-        """Copy a driver-local file into the landing-zone Volume (no Spark file reads).
+        """Copy a driver-local file into the landing-zone Volume via Python I/O.
 
-        TRAINEE NOTE - Why copy-only?
-        On Databricks Serverless, spark.read.csv('/tmp/...') and even some Volume
-        reads fail with INSUFFICIENT_PERMISSIONS (SELECT on local files).
-        dbutils.fs.cp('file:/tmp/...', '/Volumes/...') lands raw files the Bronze
-        layer can ingest later without Spark reading driver-local paths.
+        TRAINEE NOTE - Why not dbutils.fs.cp?
+        On Databricks Serverless, dbutils.fs.cp('file:/tmp/...', '/Volumes/...')
+        requires SELECT on local files. Writing with open()/shutil to the
+        /Volumes/... mount only needs WRITE VOLUME on raw_data.
         """
-        dbutils = self._get_dbutils()
         parent = os.path.dirname(volume_path)
         if parent:
-            dbutils.fs.mkdirs(parent)
+            os.makedirs(parent, exist_ok=True)
 
-        file_uri = local_path if local_path.startswith("file:") else f"file:{local_path}"
+        if os.path.exists(volume_path):
+            os.remove(volume_path)
 
-        try:
-            dbutils.fs.rm(volume_path)
-        except Exception:
-            pass
+        with open(local_path, "rb") as src:
+            with open(volume_path, "wb") as dest:
+                shutil.copyfileobj(src, dest)
 
-        dbutils.fs.cp(file_uri, volume_path)
         print(f"  -> Copied to Volume: {volume_path}")
         return volume_path
 
