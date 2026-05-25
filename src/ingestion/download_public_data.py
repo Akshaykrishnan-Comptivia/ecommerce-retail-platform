@@ -74,6 +74,61 @@ class PublicDataDownloader:
             self.config = self._default_config()
         self.landing_zone = self.config["storage"]["raw_landing_zone"]
 
+    def _get_dbutils(self):
+        """Return Databricks dbutils (required to stage local files into Volumes)."""
+        try:
+            from pyspark.dbutils import DBUtils
+
+            return DBUtils(self.spark)
+        except Exception:
+            pass
+        try:
+            import IPython
+
+            ip = IPython.get_ipython()
+            if ip is not None and "dbutils" in ip.user_ns:
+                return ip.user_ns["dbutils"]
+        except Exception:
+            pass
+        raise RuntimeError(
+            "dbutils is not available. Run this downloader on Databricks with an active spark session."
+        )
+
+    def _staging_dir(self, source_name: str) -> str:
+        return f"{self.landing_zone}/_staging/{source_name}"
+
+    def _copy_local_file_to_volume(self, local_path: str, source_name: str) -> str:
+        """Copy a driver-local file into the landing-zone Volume for Spark reads.
+
+        TRAINEE NOTE - Why stage through the Volume?
+        On Databricks Serverless, spark.read.csv('/tmp/...') fails with
+        INSUFFICIENT_PERMISSIONS (SELECT on local files). Spark can read
+        paths under /Volumes/... when the user has READ VOLUME on raw_data.
+        """
+        dbutils = self._get_dbutils()
+        staging_dir = self._staging_dir(source_name)
+        dbutils.fs.mkdirs(staging_dir)
+
+        dest_path = f"{staging_dir}/{os.path.basename(local_path)}"
+        file_uri = local_path if local_path.startswith("file:") else f"file:{local_path}"
+
+        try:
+            dbutils.fs.rm(dest_path)
+        except Exception:
+            pass
+
+        dbutils.fs.cp(file_uri, dest_path)
+        print(f"  -> Staged to Volume: {dest_path}")
+        return dest_path
+
+    def _read_csv_from_local(self, local_path: str, source_name: str):
+        volume_path = self._copy_local_file_to_volume(local_path, source_name)
+        return self.spark.read.option("header", "true").csv(volume_path)
+
+    def _read_json_from_local(self, local_path: str, source_name: str):
+        volume_path = self._copy_local_file_to_volume(local_path, source_name)
+        return self.spark.read.json(volume_path)
+
     def _default_config(self):
         """Return hardcoded default config when no config file is provided.
 
@@ -204,7 +259,7 @@ class PublicDataDownloader:
             table_name = os.path.splitext(csv_file)[0]
             local_path = os.path.join(local_dir, csv_file)
             table_output = f"{output_dir}/{table_name}"
-            df = self.spark.read.option("header", "true").csv(local_path)
+            df = self._read_csv_from_local(local_path, source_name)
             df.write.mode("overwrite").option("header", "true").csv(table_output)
             print(f"  -> {table_name}: {df.count()} rows")
 
@@ -251,7 +306,7 @@ class PublicDataDownloader:
                 local_path = os.path.join(root, filename)
                 relative_name = os.path.splitext(filename)[0]
                 if filename.lower().endswith(".csv"):
-                    df = self.spark.read.option("header", "true").csv(local_path)
+                    df = self._read_csv_from_local(local_path, source_name)
                     df.write.mode("overwrite").option("header", "true").csv(
                         f"{output_dir}/{relative_name}"
                     )
@@ -315,7 +370,7 @@ class PublicDataDownloader:
             print(f"  -> No records downloaded for {source_name}")
             return
 
-        df = self.spark.read.json(local_path)
+        df = self._read_json_from_local(local_path, source_name)
         df.write.mode("overwrite").json(output_dir)
         print(f"  -> Category: {category}")
         print(f"  -> Total records downloaded: {records_written}")
