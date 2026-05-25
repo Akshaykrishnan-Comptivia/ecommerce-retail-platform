@@ -118,9 +118,9 @@ print(spark.table(bronze_clickstream_table).count())
 
 if RUN_PUBLIC_DOWNLOADS:
     print("\nPublic Bronze tables (sample):")
-    display(spark.table("ecommerce_catalog.bronze.bronze_olist_orders_dataset").limit(5))
+    display(spark.table("ecommerce_catalog.bronze.bronze_orders_csv").limit(5))
     display(spark.table("ecommerce_catalog.bronze.bronze_uci_retail_2009_2010").limit(5))
-    display(spark.table("ecommerce_catalog.bronze.bronze_amazon_reviews_all_beauty").limit(5))
+    display(spark.table("ecommerce_catalog.bronze.bronze_amazon_reviews_tsv").limit(5))
 
 print("\nIngestion complete!")
 print("Next step: Run 02_run_silver.py to transform clickstream (sessionization).")

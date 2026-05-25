@@ -33,7 +33,7 @@ def _load_config(config_path: str | None) -> dict:
                 "amazon": {
                     "landing_subpath": "reviews/amazon_customer_reviews",
                     "source_file": "All_Beauty.jsonl",
-                    "table": "bronze_amazon_reviews_all_beauty",
+                    "table": "bronze_amazon_reviews_tsv",
                 },
             },
         },

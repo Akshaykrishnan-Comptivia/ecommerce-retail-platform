@@ -31,7 +31,17 @@ def _load_config(config_path: str | None) -> dict:
             "public": {
                 "olist": {
                     "landing_subpath": "marketplace/olist_brazilian_ecommerce",
-                    "table_prefix": "bronze_",
+                    "tables": {
+                        "olist_orders_dataset": "bronze_orders_csv",
+                        "olist_order_items_dataset": "bronze_order_items_csv",
+                        "olist_products_dataset": "bronze_products_csv",
+                        "olist_customers_dataset": "bronze_customers_csv",
+                        "olist_sellers_dataset": "bronze_sellers_csv",
+                        "olist_order_reviews_dataset": "bronze_reviews_csv",
+                        "olist_geolocation_dataset": "bronze_geolocation_csv",
+                        "olist_order_payments_dataset": "bronze_order_payments_csv",
+                        "product_category_name_translation": "bronze_product_category_translation_csv",
+                    },
                 },
                 "uci": {
                     "landing_subpath": "retail/uci_online_retail_ii",
@@ -118,7 +128,7 @@ def ingest_olist_bronze(
     config = _load_config(config_path)
     olist_cfg = config["bronze"]["public"]["olist"]
     base_path = _landing_path(config, olist_cfg["landing_subpath"])
-    prefix = olist_cfg.get("table_prefix", "bronze_")
+    table_map = olist_cfg["tables"]
 
     dbutils = _get_dbutils(spark)
     ingested: dict[str, str] = {}
@@ -130,6 +140,9 @@ def ingest_olist_bronze(
         if not folder.isDir():
             continue
         folder_name = folder.name.rstrip("/")
+        if folder_name not in table_map:
+            print(f"  -> SKIP (no table mapping): {folder_name}")
+            continue
         csv_path = None
         for entry in dbutils.fs.ls(folder.path):
             if entry.name.endswith(".csv"):
@@ -139,7 +152,7 @@ def ingest_olist_bronze(
             print(f"  -> SKIP (no CSV): {folder_name}")
             continue
 
-        table_name = f"{prefix}{folder_name}"
+        table_name = table_map[folder_name]
         target = _qualified_table(config, table_name)
         try:
             rows = ingest_csv_to_bronze(spark, csv_path, target, mode=mode)
