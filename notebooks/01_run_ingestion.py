@@ -1,4 +1,4 @@
-﻿# Databricks notebook source
+# Databricks notebook source
 # MAGIC %md
 # MAGIC # E-Commerce Retail Platform — Run Ingestion
 # MAGIC Downloads public e-commerce datasets into the Bronze landing zone.
@@ -8,12 +8,15 @@
 # MAGIC **Prerequisites:**
 # MAGIC 1. Unity Catalog + Volume created (`ecommerce_catalog.bronze.raw_data`)
 # MAGIC 2. Cluster has outbound internet access
-# MAGIC 3. (Optional) Databricks secret scope `kaggle` with keys `username` and `key` for Olist
+# MAGIC 3. (Optional) Set `KAGGLE_USERNAME` and `KAGGLE_KEY` below for Olist (Kaggle)
 # MAGIC
-# MAGIC **Sources downloaded:**
+# MAGIC **Public sources downloaded (optional):**
 # MAGIC - Brazilian E-Commerce by Olist (Kaggle)
 # MAGIC - Online Retail II (UCI)
 # MAGIC - Amazon Customer Reviews 2023 (Hugging Face)
+# MAGIC
+# MAGIC **Synthetic clickstream (Faker):**
+# MAGIC - Generate JSON → landing zone → `ecommerce_catalog.bronze.bronze_clickstream_json`
 
 # COMMAND ----------
 
@@ -25,40 +28,33 @@ dbutils.library.restartPython()
 
 # COMMAND ----------
 
-import json
 import os
 
 # TRAINEE NOTE - Kaggle authentication is required only for the Olist source.
-# Create a secret scope named "kaggle" with keys "username" and "key".
-# UCI and Amazon sources work without Kaggle creds.
-KAGGLE_SECRET_SCOPE = "kaggle"
+# Set your Kaggle username (from kaggle.com/settings) and API key below.
+# UCI and Amazon sources work without Kaggle creds. Do not commit real tokens to git.
+KAGGLE_USERNAME = "blessey.maria@comptivia.com"  # e.g. "your_kaggle_username" (not your email)
+KAGGLE_KEY = "KGAT_fb2ae310e5115a870b3cbfdeb3abc5b8"  # e.g. "KGAT_..." from kaggle.com/settings
 SETUP_KAGGLE = True
 
 if SETUP_KAGGLE:
-    try:
-        os.environ["KAGGLE_USERNAME"] = dbutils.secrets.get(
-            scope=KAGGLE_SECRET_SCOPE, key="username"
-        )
-        os.environ["KAGGLE_KEY"] = dbutils.secrets.get(
-            scope=KAGGLE_SECRET_SCOPE, key="key"
-        )
+    if KAGGLE_USERNAME and KAGGLE_KEY:
+        os.environ["KAGGLE_USERNAME"] = KAGGLE_USERNAME
+        os.environ["KAGGLE_KEY"] = KAGGLE_KEY
         print("Kaggle credentials configured (environment variables).")
-    except Exception as e:
+    else:
         print(
             "WARNING: Kaggle credentials not configured - "
             "olist_brazilian_ecommerce will fail."
         )
-        print(f"  Reason: {e}")
         print(
-            "  Fix: create secret scope 'kaggle' with keys 'username' and 'key', "
-            "or set SETUP_KAGGLE = False to skip."
+            "  Fix: set KAGGLE_USERNAME and KAGGLE_KEY in this cell, "
+            "or set SETUP_KAGGLE = False to skip Olist only."
         )
 
 # COMMAND ----------
 
 import os
-
-from src.ingestion.download_public_data import PublicDataDownloader
 
 # Relative to notebooks/ when running from a Databricks Repo checkout.
 config_path = os.path.normpath(os.path.join("..", "config", "pipeline_config.yaml"))
@@ -68,8 +64,30 @@ if not os.path.exists(config_path):
 else:
     print(f"Using config: {config_path}")
 
-downloader = PublicDataDownloader(spark, config_path=config_path)
-downloader.download_all()
+# Set False to skip public downloads and run synthetic clickstream only.
+RUN_PUBLIC_DOWNLOADS = True
+
+if RUN_PUBLIC_DOWNLOADS:
+    from src.ingestion.download_public_data import PublicDataDownloader
+
+    downloader = PublicDataDownloader(spark, config_path=config_path)
+    downloader.download_all()
+
+# COMMAND ----------
+
+from src.bronze.ingest_semi_structured import ingest_clickstream
+from src.ingestion.generate_synthetic import SyntheticDataGenerator
+
+generator = SyntheticDataGenerator(spark, config_path=config_path)
+raw_path = generator.write_clickstream_raw()
+
+bronze_clickstream_table = ingest_clickstream(
+    spark,
+    source_path=raw_path,
+    config_path=config_path,
+)
+
+print(f"Bronze clickstream table ready: {bronze_clickstream_table}")
 
 # COMMAND ----------
 
@@ -77,5 +95,13 @@ landing_zone = "/Volumes/ecommerce_catalog/bronze/raw_data"
 print(f"Landing zone contents: {landing_zone}")
 display(dbutils.fs.ls(landing_zone))
 
-print("\nIngestion download step complete!")
-print("Next step: Run Bronze ingestion notebooks/modules to load raw files into Delta tables.")
+clickstream_raw = f"{landing_zone}/synthetic/clickstream"
+print(f"\nClickstream raw JSON: {clickstream_raw}")
+display(dbutils.fs.ls(clickstream_raw))
+
+print(f"\nBronze clickstream row count:")
+display(spark.table(bronze_clickstream_table).limit(10))
+print(spark.table(bronze_clickstream_table).count())
+
+print("\nIngestion complete!")
+print("Next step: Run 02_run_silver.py to transform clickstream (sessionization).")
