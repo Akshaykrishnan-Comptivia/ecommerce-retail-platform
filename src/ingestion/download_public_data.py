@@ -1,4 +1,4 @@
-﻿"""
+"""
 Download public e-commerce datasets from Kaggle, UCI, and Amazon Reviews.
 Stores raw files in the landing zone for Bronze layer ingestion.
 
