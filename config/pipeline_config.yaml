@@ -6,6 +6,42 @@ bronze:
   schema: bronze
   tables:
     clickstream: bronze_clickstream_json
+    orders: bronze_orders_csv
+    order_items: bronze_order_items_csv
+    products: bronze_products_csv
+    customers: bronze_customers_csv
+    sellers: bronze_sellers_csv
+    reviews: bronze_reviews_csv
+    geolocation: bronze_geolocation_csv
+    order_payments: bronze_order_payments_csv
+    product_category_translation: bronze_product_category_translation_csv
+    amazon_reviews: bronze_amazon_reviews_tsv
+  public:
+    olist:
+      landing_subpath: marketplace/olist_brazilian_ecommerce
+      tables:
+        olist_orders_dataset: bronze_orders_csv
+        olist_order_items_dataset: bronze_order_items_csv
+        olist_products_dataset: bronze_products_csv
+        olist_customers_dataset: bronze_customers_csv
+        olist_sellers_dataset: bronze_sellers_csv
+        olist_order_reviews_dataset: bronze_reviews_csv
+        olist_geolocation_dataset: bronze_geolocation_csv
+        olist_order_payments_dataset: bronze_order_payments_csv
+        product_category_name_translation: bronze_product_category_translation_csv
+    uci:
+      landing_subpath: retail/uci_online_retail_ii
+      tables:
+        year_2009_2010: bronze_uci_retail_2009_2010
+        year_2010_2011: bronze_uci_retail_2010_2011
+      paths:
+        year_2009_2010: Year_2009_2010/Year_2009_2010.csv
+        year_2010_2011: Year_2010_2011/Year_2010_2011.csv
+    amazon:
+      landing_subpath: reviews/amazon_customer_reviews
+      source_file: All_Beauty.jsonl
+      table: bronze_amazon_reviews_tsv
+
 synthetic:
   clickstream:
     num_events: 1000000
@@ -30,7 +66,7 @@ data_sources:
 
   uci_online_retail_ii:
     source_url: https://archive.ics.uci.edu/dataset/502/online+retail+ii
-    url: https://archive.ics.uci.edu/static/public/502/online+retail+II.zip
+    url: https://archive.ics.uci.edu/static/public/502/online+retail+ii.zip
     format: zip
     domain: retail
     inner_file: online_retail_II.xlsx
