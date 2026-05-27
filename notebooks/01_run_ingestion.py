@@ -1,23 +1,4 @@
 ﻿# Databricks notebook source
-# MAGIC %md
-# MAGIC # Databricks notebook source
-# MAGIC %md
-# MAGIC # E-Commerce Retail Platform — Run Ingestion
-# MAGIC Downloads public e-commerce datasets into the Bronze landing zone.
-# MAGIC
-# MAGIC **TRAINEE GUIDE - Run this notebook AFTER `00_setup_catalog.py`.**
-# MAGIC
-# MAGIC **Prerequisites:**
-# MAGIC 1. Unity Catalog + Volume created (`ecommerce_catalog.bronze.raw_data`)
-# MAGIC 2. Cluster has outbound internet access
-# MAGIC 3. (Optional) Set `KAGGLE_USERNAME` and `KAGGLE_KEY` below for Olist (Kaggle)
-# MAGIC
-# MAGIC **Public sources (optional):**
-# MAGIC - Download CSV/JSONL to Volume `raw_data`
-# MAGIC - Bronze Delta tables: Olist (9 tables), UCI (2 tables), Amazon reviews
-# MAGIC - Brazilian E-Commerce by Olist (Kaggle)
-# MAGIC - Online Retail II (UCI)
-# MAGIC - Amazon Customer Reviews 2023 (Hugging Face)
 
 # COMMAND ----------
 
@@ -31,9 +12,8 @@ dbutils.library.restartPython()
 
 import os
 
-# TRAINEE NOTE - Kaggle authentication is required only for the Olist source.
-# Set your Kaggle username (from kaggle.com/settings) and API key below.
-# UCI and Amazon sources work without Kaggle creds. Do not commit real tokens to git.
+# COMMAND ----------
+
 KAGGLE_USERNAME = "blessey.maria@comptivia.com"  # e.g. "your_kaggle_username" (not your email)
 KAGGLE_KEY = "KGAT_fb2ae310e5115a870b3cbfdeb3abc5b8"  # e.g. "KGAT_..." from kaggle.com/settings
 SETUP_KAGGLE = True
@@ -66,6 +46,8 @@ if not os.path.exists(config_path):
     config_path = None
 else:
     print(f"Using config: {config_path}")
+
+RUN_PUBLIC_DOWNLOADS = True
 
 downloader = PublicDataDownloader(spark, config_path=config_path)
 downloader.download_all()
