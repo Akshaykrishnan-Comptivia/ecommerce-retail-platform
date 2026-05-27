@@ -1,7 +1,4 @@
-﻿# Databricks notebook source
-
-# COMMAND ----------
-
+# Databricks notebook source
 # MAGIC %pip install -r ../requirements.txt
 
 # COMMAND ----------
@@ -12,8 +9,9 @@ dbutils.library.restartPython()
 
 import os
 
-# COMMAND ----------
-
+# TRAINEE NOTE - Kaggle authentication is required only for the Olist source.
+# Set your Kaggle username (from kaggle.com/settings) and API key below.
+# UCI and Amazon sources work without Kaggle creds. Do not commit real tokens to git.
 KAGGLE_USERNAME = "blessey.maria@comptivia.com"  # e.g. "your_kaggle_username" (not your email)
 KAGGLE_KEY = "KGAT_fb2ae310e5115a870b3cbfdeb3abc5b8"  # e.g. "KGAT_..." from kaggle.com/settings
 SETUP_KAGGLE = True
@@ -37,8 +35,6 @@ if SETUP_KAGGLE:
 
 import os
 
-from src.ingestion.download_public_data import PublicDataDownloader
-
 # Relative to notebooks/ when running from a Databricks Repo checkout.
 config_path = os.path.normpath(os.path.join("..", "config", "pipeline_config.yaml"))
 if not os.path.exists(config_path):
@@ -47,10 +43,14 @@ if not os.path.exists(config_path):
 else:
     print(f"Using config: {config_path}")
 
+# Set False to skip public downloads and run synthetic clickstream only.
 RUN_PUBLIC_DOWNLOADS = True
 
-downloader = PublicDataDownloader(spark, config_path=config_path)
-downloader.download_all()
+if RUN_PUBLIC_DOWNLOADS:
+    from src.ingestion.download_public_data import PublicDataDownloader
+
+    downloader = PublicDataDownloader(spark, config_path=config_path)
+    downloader.download_all()
 
 # COMMAND ----------
 
@@ -65,13 +65,33 @@ if RUN_PUBLIC_DOWNLOADS:
 
 # COMMAND ----------
 
+from src.bronze.ingest_semi_structured import ingest_clickstream
+from src.ingestion.generate_synthetic import SyntheticDataGenerator
+
+generator = SyntheticDataGenerator(spark, config_path=config_path)
+raw_path = generator.write_clickstream_raw()
+
+bronze_clickstream_table = ingest_clickstream(
+    spark,
+    source_path=raw_path,
+    config_path=config_path,
+)
+
+print(f"Bronze clickstream table ready: {bronze_clickstream_table}")
+
+# COMMAND ----------
+
 landing_zone = "/Volumes/ecommerce_catalog/bronze/raw_data"
 print(f"Landing zone contents: {landing_zone}")
-try:
-    display(dbutils.fs.ls(landing_zone))
-except Exception as e:
-    print(f"Could not list volume contents: {e}")
-    print("Ensure you have READ VOLUME permission on ecommerce_catalog.bronze.raw_data.")
+display(dbutils.fs.ls(landing_zone))
+
+clickstream_raw = f"{landing_zone}/synthetic/clickstream"
+print(f"\nClickstream raw JSON: {clickstream_raw}")
+display(dbutils.fs.ls(clickstream_raw))
+
+print(f"\nBronze clickstream row count:")
+display(spark.table(bronze_clickstream_table).limit(10))
+print(spark.table(bronze_clickstream_table).count())
 
 if RUN_PUBLIC_DOWNLOADS:
     print("\nPublic Bronze tables (sample):")
@@ -79,5 +99,5 @@ if RUN_PUBLIC_DOWNLOADS:
     display(spark.table("ecommerce_catalog.bronze.bronze_uci_retail_2009_2010").limit(5))
     display(spark.table("ecommerce_catalog.bronze.bronze_amazon_reviews_tsv").limit(5))
 
-print("\nIngestion download step complete!")
-print("Next step: Run Bronze ingestion notebooks/modules to load raw files into Delta tables.")
+print("\nIngestion complete!")
+print("Next step: Run 02_run_silver.py to transform clickstream (sessionization).")
