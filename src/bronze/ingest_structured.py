@@ -1,15 +1,3 @@
-﻿"""
-Bronze ingestion for structured public datasets (CSV in Unity Catalog Volumes).
-
-Loads Olist (Kaggle) and UCI Online Retail II from the landing zone into
-Delta tables under ecommerce_catalog.bronze.
-
-Usage (Databricks notebook):
-    from src.bronze.ingest_structured import ingest_public_csv_sources
-
-    tables = ingest_public_csv_sources(spark, config_path="../config/pipeline_config.yaml")
-"""
-
 from __future__ import annotations
 
 import re
@@ -89,7 +77,6 @@ def _landing_path(config: dict, subpath: str) -> str:
 
 
 def _sanitize_column_names(df: DataFrame) -> DataFrame:
-    """Rename columns so Delta accepts them (e.g. UCI 'Customer ID' -> 'Customer_ID')."""
     for old_name in df.columns:
         new_name = re.sub(r"[,;{}()\n\t= ]+", "_", old_name).strip("_")
         if not new_name:
@@ -105,7 +92,6 @@ def ingest_csv_to_bronze(
     target_table: str,
     mode: str = "overwrite",
 ) -> int:
-    """Read a single CSV path from a Volume and write to a Bronze Delta table."""
     df = (
         spark.read.option("header", "true")
         .option("inferSchema", "true")
@@ -124,7 +110,6 @@ def ingest_olist_bronze(
     config_path: str | None = None,
     mode: str = "overwrite",
 ) -> dict[str, str]:
-    """Ingest all Olist CSV files from the landing zone into Bronze tables."""
     config = _load_config(config_path)
     olist_cfg = config["bronze"]["public"]["olist"]
     base_path = _landing_path(config, olist_cfg["landing_subpath"])
@@ -169,7 +154,6 @@ def ingest_uci_bronze(
     config_path: str | None = None,
     mode: str = "overwrite",
 ) -> dict[str, str]:
-    """Ingest UCI Online Retail II sheet CSVs into Bronze tables."""
     config = _load_config(config_path)
     uci_cfg = config["bronze"]["public"]["uci"]
     base_path = _landing_path(config, uci_cfg["landing_subpath"])
@@ -200,12 +184,6 @@ def ingest_public_csv_sources(
     config_path: str | None = None,
     mode: str = "overwrite",
 ) -> dict[str, dict[str, str]]:
-    """
-    Ingest Olist and UCI public CSV datasets into Bronze Delta tables.
-
-    Returns:
-        {"olist": {dataset_folder: qualified_table}, "uci": {sheet_key: qualified_table}}
-    """
     print("=" * 60)
     print("Bronze Public CSV Ingestion")
     print("=" * 60)
